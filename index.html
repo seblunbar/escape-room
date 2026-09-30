@@ -253,7 +253,7 @@
         ]}
       ]},
       { nombre: 'seguridad', hijos: [
-        { nombre: 'puertas', clave: 'TRUFA', archivos: [
+        { nombre: 'puertas', clave: 'TUNGSAHUR', archivos: [
           { nombre: 'control.lck', tam: 1.3, accion: 'puertaControl' },
           { nombre: 'cocina.lck', tam: 0.9, accion: 'cerrar', texto: 'Cerradura de la cocina: CERRADA.\nBuena idea en general, pero tú estás en la sala de control.' },
           { nombre: 'raptores.lck', tam: 1.1, accion: 'cerrar', texto: 'Error: la reja del recinto de raptores está abierta y el recinto está vacío.\nCerrarla ahora no sirve de mucho.' }
@@ -279,7 +279,8 @@
       { nombre: 'personal', hijos: [
         { nombre: 'tecnico_ruiz', archivos: [
           { nombre: 'nota.txt', tam: 0.8, texto: 'Recordatorio para mí:\nya no uso mi fecha de nacimiento como clave.\nAhora es el nombre de mi perrita.\nNadie lo va a adivinar.' },
-          { nombre: 'perrita.jpg', tam: 2.0, texto: '[imagen]\nUna beagle sentada sobre el teclado de la sala de control.\nSu collar tiene una placa grabada: TRUFA.' },
+          { nombre: 'doggo.jpg', tam: 2.0, texto: '[imagen]\nUna beagle sentada sobre el teclado de la sala de control.\nSu collar tiene una placa grabada: TUNGSAHUR.' },
+          { nombre: 'skibidi.txt', tam: 0.6, texto: 'Skibidi sigma pomni digital fortnite chamba free gigachad rizz\nomaigad floo xx tentación hot mail Lionel Messi Ronaldo junior mewing III chiki Ibai xokas este sech\nGolden toy puppet Ohio ruben tuesta smurf cat youtube pro insano globo de texto 51 decadencia 777 bomboclat\nactiva cam fire in the hole la grasa luisardo el pepe como tan muchacho poppy playtime.' },
           { nombre: 'arcade.exe', tam: 1.4, accion: 'arcade' }
         ]},
         { nombre: 'directora_vega', archivos: [
@@ -292,9 +293,20 @@
           { nombre: 'agenda.txt', tam: 0.7, texto: 'Lunes: inspección de cercas\nMartes: visita de inversionistas\nMiércoles: recordarle a Ruiz lo de las claves (otra vez)' },
           { nombre: 'claves.txt', tam: 0.5, texto: 'Acceso denegado.\nEste archivo solo lo puede leer la directora.\n(Buen intento.)' }
         ]}
+      { nombre: 'juegos', hijos: [
+        { nombre: 'steam', archivos: [
+          { nombre: 'superhot.url', tam: 0.8, texto: 'Abriendo...\nError de sincronización.\n\n(En el peor momento posible.)' },
+          { nombre: 'terraria.url', tam: 2.0, texto: '(Estaría bien usar los últimos\nminutos de mi vida matando al Moon Lord.)' },
+          { nombre: 'peak.url', tam: 0.6, texto: '(¿Con quién voy a jugar esto ahorita?)' },
+        ]},
+        { nombre: 'otros', archivos: [
+          { nombre: 'minecraft_launcher.exe', tam: 1.4, accion: 'arcade' },
+          { nombre: 'overwatch.exe', tam: 0.7, texto: 'Error de conexión con el servidor de Blizzard.\n\nError 503: Service Unavailable' },
+          { nombre: 'lol.exe', tam: 0.5, texto: 'Acceso denegado.\nBloqueado por el usuario.\n\n(Buena elección.)' }
+        ]}
       ]}
-    ]
-  };
+    ]}
+  ]};
 
   // Color de cada bloque según el tipo de archivo (su extensión).
   // ✏️ Si inventas una extensión nueva (por ejemplo .mp3), agrégala aquí con su color.
