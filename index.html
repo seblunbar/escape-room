@@ -301,7 +301,7 @@
           { nombre: 'peak.url', tam: 0.6, texto: '(¿Con quién voy a jugar esto ahorita?)' },
         ]},
         { nombre: 'otros', archivos: [
-          { nombre: 'minecraft_launcher.exe', tam: 1.4, accion: 'arcade' },
+          { nombre: 'minecraft_launcher.exe', tam: 1.4, accion: 'launchgame' },
           { nombre: 'overwatch.exe', tam: 0.7, texto: 'Error de conexión con el servidor de Blizzard.\n\nError 503: Service Unavailable' },
           { nombre: 'lol.exe', tam: 0.5, texto: 'Acceso denegado.\nBloqueado por el usuario.\n\n(Buena elección.)' }
         ]}
@@ -907,6 +907,12 @@ const REGLAS = {
   },
   arcade(a) {
     mostrar(a.nombre, 'INSERTE MONEDA\n\n...\n\nNo es momento para jugar.\n(Aunque esto podría ser un buen juego.)');
+  },
+  launchgame(a) {
+    mostrar(a.nombre, 'MINECRAFT\nJugar\nOpciones\nMultijugador\nSalir\n\n(Se me olvidó la crisis jugando).\n-30 segundos.');
+    const m = metros();
+    m -= 30;
+
   }
 };
 
