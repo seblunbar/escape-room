@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<!--
+=====================================================================================
+   RESERVA ISLA ÁMBAR — un navegador de archivos en 3D (estilo FSN de Silicon Graphics)
+=====================================================================================
+   IDEA DEL JUEGO
+   Estás en la sala de control. Se fue la luz, las cerraduras quedaron abiertas y algo
+   se acerca por el pasillo. Tienes 3 minutos para navegar el sistema de archivos en 3D
+   y volver a cerrar la puerta.
+
+   Cada CARPETA es una plataforma. Cada ARCHIVO es un bloque encima de ella.
+   La altura del bloque es el tamaño del archivo (igual que en el FSN real).
+
+   CÓMO ESTÁ ORGANIZADO EL CÓDIGO (mismo patrón que tu museo):
+     1) Datos        ARBOL: la lista de carpetas y archivos. ✏️ Aquí puedes inventar más.
+     2) Componentes  rotulo, suelo-reticula y sistema-archivos (construyen el mundo)
+     3) La escena    <a-scene> con cámara, luces y el componente sistema-archivos
+     4) El juego     un <script> al final con el reloj, los sonidos y las reglas
+
+   IDEA CLAVE PARA APRENDER: los componentes NO conocen las reglas del juego.
+   Solo avisan "hicieron clic en esta carpeta" con eventos (emit). El script del
+   juego escucha esos avisos y decide qué pasa. Así cada parte hace una sola cosa.
+
+   CÓMO ABRIRLO
+   A diferencia de tu museo, este archivo NO usa .glb ni .mp3: todo se dibuja con
+   código y los sonidos se fabrican en el navegador. Por eso SÍ funciona con doble
+   clic. Solo necesita internet para descargar A-Frame y las fuentes de letra.
+
+   ÍNDICE (busca estos títulos con Ctrl+F)
+     ESTILOS              colores y forma de los paneles (CSS)
+     1) DATOS             ARBOL y TIPOS
+     2) COMPONENTES       rotulo, suelo-reticula, sistema-archivos
+     3) LA ESCENA         <a-scene>, cámara y luces
+     PANTALLAS Y PANELES  el HTML que va encima del 3D (consola, visor, portada...)
+     4) EL JUEGO          estado, consola, sonidos, cámara, carpetas, clave,
+                          archivos, REGLAS, reloj, principio y fin, conexiones
+
+   SÍMBOLOS QUE VAS A VER EN LOS COMENTARIOS
+     ✏️  parte pensada para que la cambies sin miedo
+     💡  explicación de un truco o una idea de programación
+
+   RETOS PARA PRACTICAR (de fácil a difícil)
+     1. Cambia DURACION a 90 segundos para hacerlo más difícil.
+     2. Agrega un archivo .txt nuevo con una pista falsa en alguna carpeta.
+     3. Agrega una carpeta nueva completa dentro de "personal".
+     4. Crea una regla nueva en REGLAS (por ejemplo, un archivo que te regale
+        20 segundos) y úsala con "accion" en un archivo del ARBOL.
+     5. Haz que la carpeta "camaras" también pida clave, con otra pista escondida.
+=====================================================================================
+-->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Reserva Isla Nublar — sistema de control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.8.0/dist/aframe-v1.8.0.min.js"></script>
+
+  <!-- ================================================================
+       ESTILOS (CSS): cómo se ven los paneles de HTML que van encima del 3D.
+       No afectan a la escena 3D; esa se colorea con atributos de A-Frame.
+       ================================================================ -->
+  <style>
+    /* 💡 VARIABLES DE COLOR: se definen una vez aquí y se usan en todo el CSS
+       escribiendo var(--nombre). Si cambias --ambar aquí, cambia en todos lados.
+       ✏️ Puedes cambiar estos colores sin miedo. */
+    :root {
+      --panel: rgba(9, 18, 34, 0.88);
+      --panel-borde-claro: #3d5a80;
+      --panel-borde-oscuro: #050b16;
+      --texto: #d6e6f5;
+      --texto-tenue: #8aa3bf;
+      --ambar: #f0a830;
+      --rojo: #e0564a;
+      --verde: #6fc2a0;
+      --boton: #1c3354;
+      --boton-hover: #27497a;
+      --fondo-velo: rgba(4, 9, 18, 0.92);
+      --texto-principal: #1a1200;
+      --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --sans: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+      /* En celulares con "notch", env(safe-area-...) es el espacio que ocupa la
+         barra del sistema. Así nada queda escondido debajo de ella. */
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    /* 💡 Si la computadora del jugador está en modo claro, usamos estos otros
+       colores para los paneles. "@media" = "aplica esto solo si se cumple..." */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --panel: rgba(222, 230, 239, 0.93);
+        --panel-borde-claro: #ffffff;
+        --panel-borde-oscuro: #7d8fa8;
+        --texto: #14233a;
+        --texto-tenue: #4a5f7a;
+        --ambar: #9a5d00;
+        --rojo: #b3261e;
+        --verde: #1f7a55;
+        --boton: #c7d3e2;
+        --boton-hover: #b3c3d8;
+        --fondo-velo: rgba(214, 224, 236, 0.95);
+        --texto-principal: #ffffff;
+      }
+    }
+    :root[data-theme="light"] {
+      --panel: rgba(222, 230, 239, 0.93); --panel-borde-claro: #ffffff; --panel-borde-oscuro: #7d8fa8;
+      --texto: #14233a; --texto-tenue: #4a5f7a; --ambar: #9a5d00; --rojo: #b3261e; --verde: #1f7a55;
+      --boton: #c7d3e2; --boton-hover: #b3c3d8; --fondo-velo: rgba(214, 224, 236, 0.95); --texto-principal: #ffffff;
+    }
+    /* box-sizing: el ancho de una caja incluye su borde y su relleno (más fácil de calcular) */
+    *, *::before, *::after { box-sizing: inherit; }
+    html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+    body { height: 100%; margin: 0; background: #07101f; color: var(--texto); font-family: var(--sans); overflow: hidden; }
+
+    /* Paneles con el borde "biselado" de las estaciones de trabajo de los 90 */
+    .panel {
+      background: var(--panel);
+      border: 1px solid;
+      border-color: var(--panel-borde-claro) var(--panel-borde-oscuro) var(--panel-borde-oscuro) var(--panel-borde-claro);
+      border-radius: 2px;
+    }
+    /* .hud = cualquier panel que flota encima de la escena.
+       position: fixed  lo pega a la pantalla (no se mueve con la cámara 3D)
+       z-index: 10      lo pone por encima del canvas de A-Frame */
+    .hud { position: fixed; z-index: 10; }
+
+    /* ---- Barra de arriba: ruta, energía, distancia y reloj ---- */
+
+    #barra {
+      top: calc(10px + env(safe-area-inset-top, 0px)); left: 10px; right: 10px;
+      display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between;
+      padding: 8px 14px;
+    }
+    #ruta { font-family: var(--mono); font-size: 14px; overflow-wrap: anywhere; }
+    #ruta .usuario { color: var(--verde); }
+    #estado { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+    #energia { font-weight: 600; }
+    #energia.emergencia { color: var(--rojo); }
+    #energia.normal { color: var(--verde); }
+    .medidor { display: flex; align-items: center; gap: 8px; }
+    .medidor-barra { width: 120px; height: 10px; border: 1px solid var(--texto-tenue); position: relative; }
+    #relleno { position: absolute; inset: 0 auto 0 0; width: 100%; background: var(--ambar); transition: width .25s linear; }
+    #relleno.critico { background: var(--rojo); }
+    #metros, #reloj { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    #reloj { font-size: 18px; font-weight: 500; min-width: 3.2em; text-align: right; }
+
+    /* ---- Cartelito que aparece al pasar el mouse sobre algo ----
+       pointer-events: none  hace que el mouse lo "atraviese" y no estorbe los clics */
+    #info {
+      top: calc(64px + env(safe-area-inset-top, 0px)); left: 10px;
+      padding: 6px 12px; font-family: var(--mono); font-size: 13px; color: var(--texto-tenue);
+      pointer-events: none; opacity: 0; transition: opacity .15s;
+    }
+    #info.visible { opacity: 1; }
+    #info b { color: var(--texto); font-weight: 500; }
+
+    /* ---- Consola de abajo a la izquierda ---- */
+    #consola {
+      left: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      width: min(540px, calc(100% - 20px)); display: flex; flex-direction: column;
+    }
+    #registro {
+      height: 150px; overflow-y: auto; padding: 10px 12px; margin: 0;
+      font-family: var(--mono); font-size: 13px; line-height: 1.5; white-space: pre-wrap;
+    }
+    #registro .cmd { color: var(--verde); }
+    #registro .error { color: var(--rojo); }
+    #registro .aviso { color: var(--ambar); }
+    #registro .tenue { color: var(--texto-tenue); }
+    .botones { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--panel-borde-oscuro); }
+
+    /* ---- Botones con relieve: al presionarlos (:active) se invierten los
+       bordes claros y oscuros, y parece que el botón se hunde ---- */
+    button {
+      font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--texto);
+      background: var(--boton); cursor: pointer; padding: 7px 14px;
+      border: 1px solid; border-color: var(--panel-borde-claro) var(--panel-borde-oscuro) var(--panel-borde-oscuro) var(--panel-borde-claro);
+      border-radius: 2px;
+    }
+    button:hover { background: var(--boton-hover); }
+    button:active { border-color: var(--panel-borde-oscuro) var(--panel-borde-claro) var(--panel-borde-claro) var(--panel-borde-oscuro); }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--ambar); outline-offset: 2px; }
+    button.principal { background: var(--ambar); color: var(--texto-principal); font-size: 17px; padding: 10px 26px; }
+
+    /* ---- Visor de archivos (derecha). Está oculto (display: none) hasta que
+       el juego le agrega la clase "abierto" ---- */
+    #visor {
+      right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      width: min(380px, calc(100% - 20px)); display: none;
+    }
+    #visor.abierto { display: block; }
+    #visor header { display: flex; justify-content: space-between; align-items: center; padding: 8px 8px 8px 12px; border-bottom: 1px solid var(--panel-borde-oscuro); }
+    #visor-titulo { font-family: var(--mono); font-size: 14px; color: var(--ambar); }
+    #visor-texto { margin: 0; padding: 12px; font-family: var(--mono); font-size: 13px; line-height: 1.55; white-space: pre-wrap; max-height: 40vh; overflow-y: auto; }
+    #visor header button { padding: 3px 10px; font-size: 13px; }
+
+    /* ---- Pantallas angostas (celulares): consola más chica y visor arriba ---- */
+    @media (max-width: 760px) {
+      #consola { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+      #registro { height: 110px; }
+      #visor { bottom: auto; top: calc(110px + env(safe-area-inset-top, 0px)); }
+      .medidor-barra { width: 80px; }
+    }
+
+    /* ---- "Velo": fondo que cubre toda la pantalla para la portada, la ventana
+       de la clave y la pantalla final. El atributo HTML "hidden" lo esconde. ---- */
+    .velo {
+      position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+      background: var(--fondo-velo); padding: 20px;
+      padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+    .velo[hidden] { display: none; }
+    .tarjeta { max-width: 36em; padding: 28px 30px; }
+    .tarjeta h1 { font-family: var(--sans); font-weight: 600; font-size: clamp(30px, 6vw, 46px); line-height: 1.05; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .tarjeta h2 { font-family: var(--sans); font-weight: 600; font-size: 26px; margin: 0 0 10px; }
+    .subtitulo { font-family: var(--mono); font-size: 14px; color: var(--texto-tenue); margin: 0 0 20px; }
+    .tarjeta p { font-size: 17px; line-height: 1.55; margin: 0 0 14px; }
+    .tarjeta ul { margin: 0 0 22px; padding-left: 1.2em; font-size: 16px; line-height: 1.6; }
+    .tarjeta input {
+      width: 100%; font-family: var(--mono); font-size: 18px; padding: 8px 10px; margin: 6px 0 4px;
+      background: transparent; color: var(--texto); border: 1px solid var(--texto-tenue); border-radius: 2px; text-transform: uppercase;
+    }
+    .error-campo { color: var(--rojo); font-size: 14px; min-height: 1.4em; margin: 0 0 12px; }
+    .fila-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+
+  <script>
+  /* =====================================================================
+     1) DATOS: el sistema de archivos del parque
+     ✏️ Puedes agregar carpetas y archivos. Cada archivo lleva:
+        nombre   (máximo ~14 letras para que se lea en 3D)
+        tam      altura del bloque, en metros
+        texto    lo que se ve al abrirlo       (opcional)
+        accion   una regla especial del juego  (opcional, ver el script final)
+     Una carpeta con "clave" pide contraseña antes de dejarte usarla.
+     ===================================================================== */
+  const ARBOL = {
+    nombre: 'isla-ambar', hijos: [
+      { nombre: 'sistemas', hijos: [
+        { nombre: 'energia', archivos: [
+          { nombre: 'generador.exe', tam: 2.2, accion: 'energia' },
+          { nombre: 'respaldo.bat', tam: 0.7, texto: 'REM Generador de respaldo\nnivel_combustible = 0%\n\nREM Alguien olvidó recargarlo. Otra vez.' },
+          { nombre: 'consumo.log', tam: 1.4, texto: '04:12  consumo normal\n04:31  pico en cercas eléctricas\n04:33  caída total de energía\n04:33  cerraduras magnéticas: SIN ENERGÍA\n04:34  modo de emergencia activado' }
+        ]},
+        { nombre: 'red', archivos: [
+          { nombre: 'telefonos.sys', tam: 1.0, texto: 'Líneas externas: sin señal.\nCausa probable: tormenta tropical sobre la isla.\nPróximo barco de suministros: en 3 días.' },
+          { nombre: 'firewall.cfg', tam: 0.6, texto: 'permitir  control -> puertas\npermitir  control -> camaras\nbloquear  todo lo demás\n\n# no tocar sin permiso de la directora' },
+          { nombre: 'correo.log', tam: 1.6, texto: 'De: directora_vega\nPara: tecnico_ruiz\nAsunto: tus claves\n\nRuiz, deja de usar claves obvias.\nY ya te dije que no quiero fotos de tu perrita en el servidor.' }
+        ]}
+      ]},
+      { nombre: 'seguridad', hijos: [
+        { nombre: 'puertas', clave: 'TRUFA', archivos: [
+          { nombre: 'control.lck', tam: 1.3, accion: 'puertaControl' },
+          { nombre: 'cocina.lck', tam: 0.9, accion: 'cerrar', texto: 'Cerradura de la cocina: CERRADA.\nBuena idea en general, pero tú estás en la sala de control.' },
+          { nombre: 'raptores.lck', tam: 1.1, accion: 'cerrar', texto: 'Error: la reja del recinto de raptores está abierta y el recinto está vacío.\nCerrarla ahora no sirve de mucho.' }
+        ]},
+        { nombre: 'camaras', archivos: [
+          { nombre: 'pasillo.cam', tam: 1.8, accion: 'camPasillo' },
+          { nombre: 'cocina.cam', tam: 1.2, texto: 'Cámara de la cocina:\nsin movimiento.\nUna charola de pan dulce intacta sobre la mesa.' },
+          { nombre: 'recinto.cam', tam: 1.5, texto: 'Cámara del recinto R-3:\nreja abierta.\nHuellas de tres pares de patas que salen hacia el edificio de visitantes.' }
+        ]}
+      ]},
+      { nombre: 'recintos', hijos: [
+        { nombre: 'raptores', archivos: [
+          { nombre: 'estado.txt', tam: 0.9, texto: 'Recinto R-3\nCerca eléctrica: DESACTIVADA\nOcupantes esperados: 3\nOcupantes detectados: 0' },
+          { nombre: 'comida.log', tam: 1.3, texto: 'Última alimentación: hace 26 horas.\n\nNota del cuidador: están inquietas. Muy inquietas.' },
+          { nombre: 'conducta.txt', tam: 1.9, texto: 'Observaciones:\n- prueban las cercas en lugares distintos cada día\n- nunca repiten el mismo punto\n- parecen recordar dónde está cada puerta' }
+        ]},
+        { nombre: 'herbivoros', archivos: [
+          { nombre: 'estado.txt', tam: 0.9, texto: 'Recinto H-1\nCerca: DESACTIVADA\nOcupantes: 11 de 11\nComportamiento: comiendo helechos, sin preocupaciones.' },
+          { nombre: 'manada.log', tam: 1.2, texto: 'La manada durmió junto al lago.\nNada que reportar.\nQué envidia.' },
+          { nombre: 'dieta.txt', tam: 0.6, texto: 'Helechos: 400 kg por día.\nAgua: mucha.\nPresupuesto: insuficiente.' }
+        ]}
+      ]},
+      { nombre: 'personal', hijos: [
+        { nombre: 'tecnico_ruiz', archivos: [
+          { nombre: 'nota.txt', tam: 0.8, texto: 'Recordatorio para mí:\nya no uso mi fecha de nacimiento como clave.\nAhora es el nombre de mi perrita.\nNadie lo va a adivinar.' },
+          { nombre: 'perrita.jpg', tam: 2.0, texto: '[imagen]\nUna beagle sentada sobre el teclado de la sala de control.\nSu collar tiene una placa grabada: TRUFA.' },
+          { nombre: 'arcade.exe', tam: 1.4, accion: 'arcade' }
+        ]},
+        { nombre: 'directora_vega', archivos: [
+          { nombre: 'memo.txt', tam: 1.1, texto: 'Memo interno\n\nTodas las cerraduras magnéticas del edificio dependen del generador principal.\nSi se va la luz, las puertas se quedan abiertas.\nYa pedí presupuesto para arreglarlo.' },
+          { nombre: 'agenda.txt', tam: 0.7, texto: 'Lunes: inspección de cercas\nMartes: visita de inversionistas\nMiércoles: recordarle a Ruiz lo de las claves (otra vez)' },
+          { nombre: 'claves.txt', tam: 0.5, texto: 'Acceso denegado.\nEste archivo solo lo puede leer la directora.\n(Buen intento.)' }
+        ]},
+        { nombre: 'director_John', archivos: [
+          { nombre: 'memo.txt', tam: 1.1, texto: 'Memo interno\n\nTodas las cerraduras magnéticas del edificio dependen del generador principal.\nSi se va la luz, las puertas se quedan abiertas.\nYa pedí presupuesto para arreglarlo.' },
+          { nombre: 'agenda.txt', tam: 0.7, texto: 'Lunes: inspección de cercas\nMartes: visita de inversionistas\nMiércoles: recordarle a Ruiz lo de las claves (otra vez)' },
+          { nombre: 'claves.txt', tam: 0.5, texto: 'Acceso denegado.\nEste archivo solo lo puede leer la directora.\n(Buen intento.)' }
+        ]}
+      ]}
+    ]
+  };
+
+  // Color de cada bloque según el tipo de archivo (su extensión).
+  // ✏️ Si inventas una extensión nueva (por ejemplo .mp3), agrégala aquí con su color.
+  const TIPOS = {
+    exe: { color: '#f0a830', nombre: 'programa' },   bat: { color: '#d98a3a', nombre: 'script' },
+    txt: { color: '#8fd3f4', nombre: 'texto' },      log: { color: '#6fc2a0', nombre: 'bitácora' },
+    lck: { color: '#e2574c', nombre: 'cerradura' },  cam: { color: '#b88ce8', nombre: 'cámara' },
+    sys: { color: '#c9d4e3', nombre: 'sistema' },    cfg: { color: '#aab8cc', nombre: 'configuración' },
+    jpg: { color: '#f2b8cf', nombre: 'imagen' }
+  };
+  // 💡 "Función flecha": una forma corta de escribir una función.
+  //    extension('nota.txt') → corta el texto en cada punto y toma el último pedazo → 'txt'
+  const extension = n => n.split('.').pop();
+
+
+  /* =====================================================================
+     2) COMPONENTES
+     ===================================================================== */
+
+  /* ---------------------------------------------------------------------
+     COMPONENTE "rotulo": texto en 3D dibujado en un <canvas>.
+     ¿Por qué no usamos <a-text>? Porque <a-text> no dibuja acentos ni ñ.
+     Aquí dibujamos el texto como una imagen (con la fuente de la página)
+     y la pegamos en un plano. Así sí salen "energía" o "niño".
+     --------------------------------------------------------------------- */
+  AFRAME.registerComponent('rotulo', {
+    schema: {
+      texto: { default: '' },
+      color: { default: '#dbe8f6' },
+      alto:  { default: 0.3 }    // altura del texto en metros; el ancho se calcula solo
+    },
+    init() {
+      const d = this.data;
+      const lienzo = document.createElement('canvas');
+      const ctx = lienzo.getContext('2d');
+      const fuente = '500 64px "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+      ctx.font = fuente;
+      lienzo.width = Math.ceil(ctx.measureText(d.texto).width) + 24;
+      lienzo.height = 96;
+      ctx.font = fuente;            // al cambiar el tamaño del canvas se borra la fuente
+      ctx.fillStyle = d.color;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(d.texto, 12, 50);
+
+      const textura = new THREE.CanvasTexture(lienzo);
+      textura.colorSpace = THREE.SRGBColorSpace;
+      textura.anisotropy = 4;
+      // 💡 Regla de tres: si el canvas es 5 veces más ancho que alto,
+      //    el plano 3D también debe serlo, o las letras se verían aplastadas.
+      const ancho = d.alto * lienzo.width / lienzo.height;
+      const malla = new THREE.Mesh(
+        new THREE.PlaneGeometry(ancho, d.alto),
+        new THREE.MeshBasicMaterial({ map: textura, transparent: true, depthWrite: false })
+      );
+      // setObject3D: le decimos a A-Frame "esta es la figura 3D de esta entidad"
+      this.el.setObject3D('mesh', malla);
+    },
+    // remove() se ejecuta si la entidad se borra de la escena: limpiamos la figura
+    remove() { this.el.removeObject3D('mesh'); }
+  });
+
+
+  /* ---------------------------------------------------------------------
+     COMPONENTE "suelo-reticula": el piso cuadriculado del FSN.
+     Dibuja UN cuadrito en un canvas y lo repite muchas veces (repeat).
+     setColor() lo usa el juego para cambiar de rojo (emergencia) a azul.
+     --------------------------------------------------------------------- */
+  AFRAME.registerComponent('suelo-reticula', {
+    schema: { tamano: { default: 240 }, color: { default: '#7a2a2a' } },
+    init() {
+      const lienzo = document.createElement('canvas');
+      lienzo.width = lienzo.height = 128;
+      const ctx = lienzo.getContext('2d');
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(0, 0, 128, 128);
+      const textura = new THREE.CanvasTexture(lienzo);
+      textura.wrapS = textura.wrapT = THREE.RepeatWrapping;
+      textura.repeat.set(this.data.tamano / 2, this.data.tamano / 2);   // un cuadro cada 2 m
+      textura.anisotropy = 8;
+      this.material = new THREE.MeshBasicMaterial({ map: textura, color: this.data.color, transparent: true, opacity: 0.55, depthWrite: false });
+      const malla = new THREE.Mesh(new THREE.PlaneGeometry(this.data.tamano, this.data.tamano), this.material);
+      malla.rotation.x = -Math.PI / 2;
+      this.el.setObject3D('mesh', malla);
+    },
+    setColor(color) { this.material.color.set(color); }
+  });
+
+
+  /* ---------------------------------------------------------------------
+     COMPONENTE "sistema-archivos": convierte ARBOL en plataformas y bloques.
+     Trabaja en dos pasadas, como un carpintero:
+       medir()    calcula cuánto espacio necesita cada carpeta y sus hijas
+       colocar()  pone cada carpeta en su lugar y dibuja sus archivos
+     Cuando termina, avisa a la escena con el evento "sistema-listo".
+     --------------------------------------------------------------------- */
+  const SEP = 1.8;        // distancia entre bloques
+  const HUECO = 1.6;      // espacio entre plataformas vecinas
+  const NIVEL = 10;       // distancia entre un nivel del árbol y el siguiente
+
+  AFRAME.registerComponent('sistema-archivos', {
+    init() {
+      this.nodos = [];
+      // Esperamos a que cargue la fuente para que los rótulos salgan con ella
+      const fuente = document.fonts ? document.fonts.load('500 64px "IBM Plex Mono"') : Promise.resolve();
+      Promise.race([fuente, new Promise(r => setTimeout(r, 2500))])
+        .catch(() => {})
+        .then(() => {
+          this.medir(ARBOL);
+          this.colocar(ARBOL, 0, 0, null, '');
+          this.el.sceneEl.emit('sistema-listo', { raiz: ARBOL, nodos: this.nodos });
+        });
+    },
+
+    medir(n) {
+      const nArch = (n.archivos || []).length;
+      n.cols = Math.min(3, Math.max(1, nArch));
+      n.filas = Math.max(1, Math.ceil(nArch / 3));
+      n.w = nArch ? n.cols * SEP + 0.6 : 2.6;     // ancho de la plataforma
+      n.d = nArch ? n.filas * SEP + 0.8 : 2.6;    // fondo de la plataforma
+      // 💡 RECURSIÓN: medir() se llama a sí misma para cada carpeta hija.
+      //    Así mide el árbol completo sin importar cuántos niveles tenga.
+      //    "n.hijos || []" = si no tiene hijos, usa una lista vacía.
+      const hijos = n.hijos || [];
+      hijos.forEach(h => this.medir(h));
+      const anchoHijos = hijos.reduce((s, h) => s + h.anchoSub, 0) + HUECO * Math.max(0, hijos.length - 1);
+      n.anchoSub = Math.max(n.w, anchoHijos);     // ancho de la carpeta + todo lo que cuelga de ella
+    },
+
+    colocar(n, x, nivel, padre, rutaPadre) {
+      n.x = x;
+      n.z = -nivel * NIVEL;
+      n.padre = padre;
+      n.ruta = rutaPadre + '/' + n.nombre;
+      this.nodos.push(n);
+      const escena = this.el.sceneEl;
+
+      // Plataforma (la carpeta). La clase "clicable" es lo que busca el raycaster del mouse.
+      const plat = this.crear('a-box', {
+        position: `${x} 0.15 ${n.z}`, width: n.w, height: 0.3, depth: n.d,
+        color: '#4f5a6d', class: 'clicable'
+      });
+      n.el = plat;
+      plat.addEventListener('mouseenter', () => escena.emit('sobre', { nodo: n }));
+      plat.addEventListener('mouseleave', () => escena.emit('sobre', {}));
+      plat.addEventListener('click', () => escena.emit('elegir-carpeta', { nodo: n }));
+      // 💡 emit() lanza un evento propio con un "paquete" de datos (detail).
+      //    El script del juego lo recibe con escena.addEventListener('elegir-carpeta', ...)
+
+      // Nombre de la carpeta, inclinado -40° en X: la cámara mira hacia abajo a 40°,
+      // así que el texto queda "de frente" a ella y se lee sin deformarse.
+      this.crear('a-entity', {
+        position: `${x} 0.4 ${n.z + n.d / 2 + 0.55}`, rotation: '-40 0 0',
+        rotulo: { texto: n.nombre + '/', alto: 0.5, color: '#ffd98a' }
+      });
+
+      // Línea en el piso que une a la carpeta con su carpeta madre
+      if (padre) {
+        const x1 = padre.x, z1 = padre.z - padre.d / 2, x2 = x, z2 = n.z + n.d / 2 + 1.1;
+        // 💡 Math.hypot = teorema de Pitágoras (largo de la línea).
+        //    Math.atan2 = el ángulo para girarla y que apunte de una carpeta a la otra.
+        //    "* 180 / Math.PI" convierte de radianes a grados, que es lo que usa A-Frame.
+        const dx = x2 - x1, dz = z2 - z1, largo = Math.hypot(dx, dz);
+        this.crear('a-box', {
+          position: `${(x1 + x2) / 2} 0.02 ${(z1 + z2) / 2}`,
+          rotation: `0 ${Math.atan2(dx, dz) * 180 / Math.PI} 0`,
+          width: 0.08, height: 0.02, depth: largo,
+          material: 'shader: flat; color: #9fb4d0'
+        });
+      }
+
+      // Archivos: bloques en una cuadrícula de hasta 3 columnas.
+      // 💡 i % 3 = el resto de dividir entre 3 (0,1,2,0,1,2...) → la columna
+      //    Math.floor(i / 3) = cuántas veces cabe el 3 (0,0,0,1,1,1...) → la fila
+      (n.archivos || []).forEach((a, i) => {
+        const col = i % 3, fila = Math.floor(i / 3);
+        const fx = x - (n.cols - 1) * SEP / 2 + col * SEP;
+        const fz = n.z - (n.filas - 1) * SEP / 2 + fila * SEP - 0.2;
+        const tipo = TIPOS[extension(a.nombre)] || TIPOS.txt;
+        // Guardamos en el archivo a qué carpeta pertenece y de qué tipo es,
+        // para que el juego lo pueda consultar después.
+        a.dir = n;
+        a.tipo = tipo;
+        a.el = this.crear('a-box', {
+          position: `${fx} ${0.3 + a.tam / 2} ${fz}`, width: 0.8, height: a.tam, depth: 0.8,
+          color: tipo.color, class: 'clicable'
+        });
+        a.el.addEventListener('mouseenter', () => { a.el.object3D.scale.set(1.12, 1.03, 1.12); escena.emit('sobre', { archivo: a }); });
+        a.el.addEventListener('mouseleave', () => { a.el.object3D.scale.set(1, 1, 1); escena.emit('sobre', {}); });
+        a.el.addEventListener('click', () => escena.emit('elegir-archivo', { archivo: a }));
+        this.crear('a-entity', {
+          position: `${fx} 0.46 ${fz + 0.62}`, rotation: '-40 0 0',
+          rotulo: { texto: a.nombre, alto: 0.22 }
+        });
+      });
+
+      // Carpetas hijas: repartidas a lo ancho, un nivel más atrás.
+      // "cursor" avanza de izquierda a derecha; cada hija ocupa su anchoSub.
+      const hijos = n.hijos || [];
+      const total = hijos.reduce((s, h) => s + h.anchoSub, 0) + HUECO * Math.max(0, hijos.length - 1);
+      let cursor = x - total / 2;
+      hijos.forEach(h => {
+        this.colocar(h, cursor + h.anchoSub / 2, nivel + 1, n, n.ruta);
+        cursor += h.anchoSub + HUECO;
+      });
+    },
+
+    // Ayudante: igual que en tu museo, crea una etiqueta con atributos y la mete aquí
+    crear(etiqueta, atributos) {
+      const e = document.createElement(etiqueta);
+      for (const k in atributos) e.setAttribute(k, atributos[k]);
+      this.el.appendChild(e);
+      return e;
+    }
+  });
+  </script>
+</head>
+<body>
+
+<!-- ================================================================
+     3) LA ESCENA
+       cursor + raycaster: el mouse (o el dedo) solo toca lo que tiene la clase "clicable"
+       No usamos look-controls: la cámara siempre mira hacia abajo a 40°
+       y el juego la mueve "volando" de carpeta en carpeta.
+       background     color del fondo (no hay cielo)
+       fog            niebla: lo lejano se desvanece, como en los viejos gráficos 3D
+       xr-mode-ui     escondemos el botón de VR (este juego es para pantalla)
+       loading-screen colores de la pantalla de carga de A-Frame
+     ================================================================ -->
+<a-scene cursor="rayOrigin: mouse" raycaster="objects: .clicable"
+         background="color: #07101f" fog="type: exponential; color: #07101f; density: 0.016"
+         xr-mode-ui="enabled: false" loading-screen="dotsColor: #f0a830; backgroundColor: #07101f">
+
+  <a-entity id="rig" position="0 22 14">
+    <a-entity id="camara" camera="fov: 70" rotation="-40 0 0"></a-entity>
+  </a-entity>
+
+  <!-- Luces de emergencia: el juego las cambia al restaurar la energía.
+       La luz roja "late" con el componente animation, animando su intensidad
+       (property: light.intensity) igual que tu museo anima la rotación. -->
+  <a-entity id="luz-amb" light="type: ambient; color: #6a4a52; intensity: 0.6"></a-entity>
+  <a-entity id="luz-dir" light="type: directional; color: #ffffff; intensity: 0.3" position="-6 12 8"></a-entity>
+  <a-entity id="luz-emerg" light="type: point; color: #ff3b2f; intensity: 40; distance: 70; decay: 1" position="0 9 -10"
+            animation="property: light.intensity; from: 15; to: 60; dir: alternate; loop: true; dur: 900; easing: easeInOutSine"></a-entity>
+
+  <!-- El piso cuadriculado y el sistema de archivos. Con ESTAS DOS líneas se
+       construye todo el mundo: los componentes hacen el resto. -->
+  <a-entity id="suelo" suelo-reticula></a-entity>
+  <a-entity sistema-archivos></a-entity>
+</a-scene>
+
+
+<!-- ================================================================
+     PANTALLAS Y PANELES (HTML normal encima de la escena 3D)
+     Cada elemento tiene un id. El juego los busca con $('id') para cambiar
+     su texto o mostrarlos y esconderlos.
+       barra          ruta actual, energía, distancia y reloj
+       info           cartelito al pasar el mouse
+       consola        el registro de comandos y los botones de navegación
+       visor          donde se lee el contenido de un archivo
+       portada        pantalla de inicio (necesaria para poder usar sonido)
+       ventana-clave  pide la contraseña
+       final          pantalla de ganar o perder
+     aria-live="polite" hace que los lectores de pantalla (para personas con
+     discapacidad visual) lean en voz alta lo que cambie en ese panel.
+     ================================================================ -->
+<div id="barra" class="hud panel">
+  <div id="ruta"><span class="usuario">ruiz@control</span>:/isla-ambar $</div>
+  <div id="estado">
+    <span>Energía: <span id="energia" class="emergencia">emergencia</span></span>
+    <span class="medidor">
+      <span>Pasillo</span>
+      <span class="medidor-barra" aria-hidden="true"><span id="relleno"></span></span>
+      <span id="metros">60 m</span>
+    </span>
+    <span id="reloj">3:00</span>
+  </div>
+</div>
+
+<div id="info" class="hud panel" aria-live="polite"></div>
+
+<div id="consola" class="hud panel">
+  <pre id="registro" aria-live="polite"></pre>
+  <div class="botones">
+    <button id="btn-subir">Subir un nivel</button>
+    <button id="btn-general">Vista general</button>
+  </div>
+</div>
+
+<div id="visor" class="hud panel" role="dialog" aria-labelledby="visor-titulo">
+  <header><span id="visor-titulo"></span><button id="btn-cerrar-visor">Cerrar</button></header>
+  <pre id="visor-texto"></pre>
+</div>
+
+<div id="portada" class="velo">
+  <div class="tarjeta panel">
+    <h1>Reserva Isla Nublar</h1>
+    <p class="subtitulo">Sistema de control del centro de visitantes</p>
+    <p>La tormenta tumbó la energía y las cerraduras de la sala de control quedaron abiertas.
+       En la cámara del pasillo se ve algo acercándose.</p>
+    <p>Tienes tres minutos para encontrar en el sistema cómo volver a cerrar la puerta.</p>
+    <ul>
+      <li>Haz clic en una plataforma para volar a esa carpeta.</li>
+      <li>Haz clic en un bloque para abrir o ejecutar ese archivo.</li>
+      <li>La altura de cada bloque es el tamaño del archivo.</li>
+    </ul>
+    <button id="btn-iniciar" class="principal">Iniciar sistema</button>
+  </div>
+</div>
+
+<div id="ventana-clave" class="velo" hidden>
+  <div class="tarjeta panel" role="dialog" aria-labelledby="clave-titulo">
+    <h2 id="clave-titulo">Carpeta protegida</h2>
+    <p id="clave-texto"></p>
+    <label for="campo-clave">Clave de acceso</label>
+    <input id="campo-clave" autocomplete="off" spellcheck="false">
+    <p id="clave-error" class="error-campo"></p>
+    <div class="fila-botones">
+      <button id="btn-clave-ok" class="principal">Entrar</button>
+      <button id="btn-clave-cancelar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="final" class="velo" hidden>
+  <div class="tarjeta panel">
+    <h1 id="final-titulo"></h1>
+    <p id="final-texto"></p>
+    <p id="final-record" class="subtitulo"></p>
+    <button id="btn-otra" class="principal">Jugar de nuevo</button>
+  </div>
+</div>
+
+
+<script>
+/* =====================================================================
+   4) EL JUEGO
+   Aquí viven las reglas. Escuchamos los avisos de los componentes:
+     "sistema-listo"   el mundo ya está construido
+     "sobre"           el mouse pasó sobre una carpeta o un archivo
+     "elegir-carpeta"  clic en una plataforma
+     "elegir-archivo"  clic en un bloque
+   ===================================================================== */
+
+/* ---------- Atajos ---------- */
+const escena = document.querySelector('a-scene');
+const rig = document.getElementById('rig');
+// 💡 $ es solo un nombre corto: $('reloj') hace lo mismo que document.getElementById('reloj')
+const $ = id => document.getElementById(id);
+
+const DURACION = 180;           // ✏️ segundos para ganar
+const METROS_INICIALES = 60;    // a qué distancia empiezan los raptores
+
+/* ---------- Estado del juego ----------
+   💡 Todo lo que "recuerda" el juego vive en este objeto J. Si algo se rompe,
+      puedes abrir la consola del navegador (F12) y escribir J para ver cómo va. */
+const J = {
+  activo: false, fin: false, inicio: 0, restante: DURACION,
+  energia: false,
+  desbloqueadas: new Set(),     // carpetas con clave que ya abriste
+  dirActual: null,
+  avisosDados: new Set(),
+  pendiente: null               // lo que se hará al escribir bien la clave
+};
+// RAIZ = la carpeta principal; NODOS = lista de TODAS las carpetas (llegan en "sistema-listo")
+let RAIZ = null, NODOS = [];
+
+
+/* ---------- La consola ----------
+   escribir('texto', 'clase') agrega una línea. La clase decide el color:
+   'cmd' verde, 'error' rojo, 'aviso' ámbar, 'tenue' gris.
+   💡 Usamos textContent (no innerHTML) para poner texto: así nunca se
+      interpreta como HTML por accidente. */
+function escribir(texto, clase) {
+  const reg = $('registro');
+  const linea = document.createElement('span');
+  if (clase) linea.className = clase;
+  linea.textContent = texto + '\n';
+  reg.appendChild(linea);
+  // Guardamos solo las últimas 80 líneas para que no crezca para siempre
+  while (reg.childNodes.length > 80) reg.removeChild(reg.firstChild);
+  // Bajamos la barra de desplazamiento hasta el final para ver lo más nuevo
+  reg.scrollTop = reg.scrollHeight;
+}
+function actualizarRuta() {
+  const ruta = J.dirActual ? J.dirActual.ruta : '/isla-ambar';
+  $('ruta').innerHTML = '';
+  const u = document.createElement('span');
+  u.className = 'usuario';
+  u.textContent = 'ruiz@control';
+  $('ruta').append(u, ':' + ruta + ' $');
+}
+
+
+/* ---------- Sonidos sintetizados (no hacen falta archivos mp3) ----------
+   💡 La Web Audio API funciona como un equipo de sonido con cables:
+        fuente  →  (filtro)  →  volumen (gain)  →  bocinas (destination)
+      tono()  usa un OSCILADOR: una onda pura, como un sintetizador (bips).
+      ruido() usa números al azar (estática) y un FILTRO:
+        lowpass  deja pasar solo lo grave  → suena a gruñido
+        highpass deja pasar solo lo agudo  → suena a rasguño
+      El volumen empieza alto y se apaga rápido (exponentialRamp): eso lo
+      hace sonar como un golpe corto y no como un pitido continuo. */
+let audio = null;
+function ctxAudio() {
+  if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (audio.state !== 'running') audio.resume();
+  return audio;
+}
+function tono(frec, dur, tipo = 'square', vol = 0.05, retraso = 0) {
+  const a = ctxAudio(); if (!a) return;
+  const t = a.currentTime + retraso;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = tipo; o.frequency.setValueAtTime(frec, t);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+function ruido(dur, frecFiltro, tipoFiltro, vol, retraso = 0) {
+  const a = ctxAudio(); if (!a) return;
+  const t = a.currentTime + retraso;
+  const buf = a.createBuffer(1, Math.ceil(a.sampleRate * dur), a.sampleRate);
+  const datos = buf.getChannelData(0);
+  for (let i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
+  const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = buf; f.type = tipoFiltro; f.frequency.value = frecFiltro;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(a.destination); src.start(t); src.stop(t + dur + 0.05);
+}
+// ✏️ Aquí puedes inventar sonidos nuevos combinando tono() y ruido().
+//    Los números de "exito" son notas: 523 = Do, 659 = Mi, 784 = Sol, 1046 = Do agudo.
+const sonido = {
+  clic:    () => tono(880, 0.06, 'square', 0.03),
+  error:   () => { tono(140, 0.25, 'sawtooth', 0.06); tono(110, 0.3, 'sawtooth', 0.06, 0.12); },
+  exito:   () => [523, 659, 784, 1046].forEach((f, i) => tono(f, 0.2, 'triangle', 0.07, i * 0.1)),
+  arranque:() => [220, 277, 330, 440, 554, 660].forEach((f, i) => tono(f, 0.35, 'sawtooth', 0.04, i * 0.4)),
+  gruñido: () => { ruido(1.3, 260, 'lowpass', 0.5); tono(62, 1.1, 'sawtooth', 0.05); },
+  golpe:   () => { tono(55, 0.25, 'sine', 0.5); tono(50, 0.25, 'sine', 0.5, 0.35); },
+  rasguño: () => { for (let i = 0; i < 6; i++) ruido(0.07, 2800, 'highpass', 0.25, i * 0.11); }
+};
+
+
+/* ---------- La cámara vuela ----------
+   La cámara siempre está inclinada 40°. Para "mirar" un punto del piso, la
+   ponemos atrás y arriba de él, a una distancia que depende de cuánto
+   queremos que quepa en la pantalla. Luego usamos el componente "animation".
+   💡 La cuenta: el ancho de la pantalla depende de su proporción (aspecto).
+      En un celular vertical cabe menos a lo ancho, así que la cámara se aleja más.
+      Math.sin y Math.cos reparten esa distancia entre "subir" y "retroceder". */
+const INCLINACION = 40 * Math.PI / 180;
+function volar(x, z, anchoVisible, inmediato) {
+  const aspecto = window.innerWidth / window.innerHeight;
+  const mitadHorizontal = Math.atan(Math.tan((70 / 2) * Math.PI / 180) * aspecto);
+  const dist = Math.max(7, (anchoVisible / 2 + 1) / Math.tan(mitadHorizontal));
+  const destino = `${x} ${dist * Math.sin(INCLINACION)} ${z + dist * Math.cos(INCLINACION)}`;
+  // inmediato = true se usa al principio: la cámara aparece ahí sin volar
+  if (inmediato) { rig.setAttribute('position', destino); return; }
+  // "animation__vuelo": el doble guion bajo permite tener varias animaciones con nombres distintos
+  rig.setAttribute('animation__vuelo', { property: 'position', to: destino, dur: 1100, easing: 'easeInOutCubic' });
+}
+function vistaGeneral() {
+  J.dirActual = null;
+  actualizarRuta();
+  volar(0, -NIVEL, RAIZ.anchoSub);
+}
+
+
+/* ---------- Navegar carpetas ----------
+   bloqueada(n) responde true si la carpeta tiene clave y todavía no la abres.
+   entrarCarpeta(n, silencioso):
+     1. mueve la cámara y escribe "cd ..." en la consola
+     2. si está bloqueada, pide la clave y se detiene (return false)
+     3. si no, lista su contenido ("ls")
+   silencioso = true se usa al abrir un archivo: no repite el listado. */
+const bloqueada = n => n.clave && !J.desbloqueadas.has(n);
+
+function entrarCarpeta(n, silencioso) {
+  if (J.dirActual !== n || !silencioso) {
+    J.dirActual = n;
+    actualizarRuta();
+    // Carpeta con archivos: la vemos de cerca. Carpeta con subcarpetas: vemos todo lo que cuelga de ella.
+    if (n.archivos) volar(n.x, n.z, n.w);
+    else volar(n.x, n.z - NIVEL / 2, n.anchoSub);
+    escribir('$ cd ' + n.ruta, 'cmd');
+  }
+  if (bloqueada(n)) {
+    escribir('cd: permiso denegado. Se requiere clave.', 'error');
+    sonido.error();
+    pedirClave(n, () => listar(n));
+    return false;
+  }
+  if (!silencioso) listar(n);
+  return true;
+}
+function listar(n) {
+  const nombres = [...(n.hijos || []).map(h => h.nombre + '/'), ...(n.archivos || []).map(a => a.nombre)];
+  escribir(nombres.join('   '), 'tenue');
+}
+function subir() {
+  if (!J.dirActual) return;
+  if (J.dirActual.padre) entrarCarpeta(J.dirActual.padre);
+  else vistaGeneral();
+}
+
+
+/* ---------- Clave de acceso ----------
+   💡 CALLBACK: pedirClave recibe una función "despues" y la guarda en J.pendiente.
+      No la ejecuta todavía: la ejecuta revisarClave() SOLO si la clave es correcta.
+      Es como dejar un encargo: "cuando termines, haz esto". */
+function pedirClave(n, despues) {
+  J.pendiente = { nodo: n, despues };
+  $('clave-texto').textContent = `La carpeta ${n.ruta} está protegida. Escribe la clave para usarla.`;
+  $('campo-clave').value = '';
+  $('clave-error').textContent = '';
+  $('ventana-clave').hidden = false;
+  $('campo-clave').focus();
+}
+function revisarClave() {
+  const p = J.pendiente; if (!p) return;
+  // trim() quita espacios de los lados; toUpperCase() convierte a mayúsculas.
+  // Así "trufa", " Trufa " y "TRUFA" cuentan igual.
+  const escrita = $('campo-clave').value.trim().toUpperCase();
+  if (!escrita) { $('clave-error').textContent = 'Escribe una clave primero.'; return; }
+  if (escrita !== p.nodo.clave) {
+    $('clave-error').textContent = 'Clave incorrecta. Busca pistas en las carpetas del personal.';
+    sonido.error();
+    return;
+  }
+  J.desbloqueadas.add(p.nodo);
+  pintarPlataformas();
+  $('ventana-clave').hidden = true;
+  J.pendiente = null;
+  escribir('Acceso concedido a ' + p.nodo.ruta, 'aviso');
+  sonido.exito();
+  p.despues();
+}
+
+
+/* ---------- Ejecutar archivos ----------
+   abrirArchivo() escribe un comando falso de Unix según la extensión y luego:
+     - si el archivo tiene "accion", ejecuta esa regla de REGLAS
+     - si no, muestra su "texto" en el visor */
+function abrirArchivo(a) {
+  const ext = extension(a.nombre);
+  // 💡 Operador ternario encadenado:  condición ? valorSiSí : valorSiNo
+  //    Se lee como una cadena de "si... si no, si... si no...".
+  const comando = (ext === 'exe' || ext === 'bat') ? './' + a.nombre
+                : ext === 'lck' ? 'lockctl ' + a.nombre
+                : ext === 'cam' ? 'camview ' + a.nombre
+                : 'cat ' + a.nombre;
+  escribir('$ ' + comando, 'cmd');
+  sonido.clic();
+  // 💡 REGLAS[a.accion] busca en el objeto REGLAS una función con ese nombre.
+  //    Si a.accion es 'energia', obtenemos REGLAS.energia. Si no existe, queda undefined.
+  const regla = REGLAS[a.accion];
+  if (regla) regla(a);
+  else mostrar(a.nombre, a.texto || '(archivo vacío)');
+}
+function mostrar(titulo, texto) {
+  $('visor-titulo').textContent = titulo;
+  $('visor-texto').textContent = texto;
+  $('visor').classList.add('abierto');
+}
+
+// ✏️ Aquí están las reglas especiales. Para inventar una nueva, agrega una
+//    función aquí y ponle "accion: 'nombreDeTuRegla'" a un archivo del ARBOL.
+const REGLAS = {
+  energia() {
+    if (J.energia) { escribir('El generador principal ya está funcionando.', 'tenue'); return; }
+    if (J.arrancando) return;
+    J.arrancando = true;
+    sonido.arranque();
+    const pasos = ['Verificando interruptores...', 'Arrancando generador principal...', '3', '2', '1'];
+    // 💡 setTimeout(función, milisegundos) ejecuta algo MÁS TARDE.
+    //    Cada paso espera i * 500 ms: 0, 500, 1000... y así parece una cuenta regresiva.
+    pasos.forEach((p, i) => setTimeout(() => { if (!J.fin) escribir(p, 'aviso'); }, i * 500));
+    setTimeout(() => { if (!J.fin) restaurarEnergia(); }, pasos.length * 500);
+  },
+  puertaControl() {
+    if (!J.energia) {
+      escribir('lockctl: los cerrojos magnéticos no responden. No hay energía.', 'error');
+      sonido.error();
+      return;
+    }
+    escribir('Cerrojos magnéticos de la sala de control: ACTIVOS', 'aviso');
+    terminar(true);
+  },
+  cerrar(a) {
+    if (!J.energia) { escribir('lockctl: sin energía en las cerraduras.', 'error'); sonido.error(); return; }
+    mostrar(a.nombre, a.texto);
+  },
+  camPasillo(a) {
+    const m = metros();
+    // El mensaje de la cámara cambia según qué tan cerca estén los raptores
+    const texto = m > 40 ? `Pasillo B: movimiento detectado a ${m} m de la sala de control.\nDemasiado rápido para ser una persona.`
+                : m > 15 ? `Pasillo B: tres siluetas a ${m} m.\nSe mueven por turnos, como si se cubrieran entre ellas.`
+                : `Pasillo B: vacío.\nEso significa que ya están frente a tu puerta.`;
+    mostrar(a.nombre, texto);
+  },
+  arcade(a) {
+    mostrar(a.nombre, 'INSERTE MONEDA\n\n...\n\nNo es momento para jugar.\n(Aunque esto podría ser un buen juego.)');
+  }
+};
+
+// Cambia luces, piso y colores de todo el mundo cuando vuelve la luz
+function restaurarEnergia() {
+  J.energia = true;
+  $('energia').textContent = 'normal';
+  $('energia').className = 'normal';
+  const emerg = $('luz-emerg');
+  emerg.removeAttribute('animation');
+  emerg.setAttribute('light', 'intensity', 0);
+  $('luz-amb').setAttribute('light', { color: '#c9d8ff', intensity: 0.9 });
+  $('luz-dir').setAttribute('light', 'intensity', 0.9);
+  $('suelo').components['suelo-reticula'].setColor('#3f86d6');
+  pintarPlataformas();
+  escribir('ENERGÍA RESTAURADA. Cerraduras magnéticas en línea.', 'aviso');
+  sonido.exito();
+}
+
+// Pinta cada plataforma: rojiza si está bloqueada, gris oscuro sin energía, azul grisáceo con energía
+function pintarPlataformas() {
+  NODOS.forEach(n => {
+    const color = bloqueada(n) ? '#8a3e48' : (J.energia ? '#8394ad' : '#4f5a6d');
+    n.el.setAttribute('color', color);
+  });
+}
+
+
+/* ---------- El reloj ----------
+   💡 requestAnimationFrame(cadaCuadro) le pide al navegador: "llama a esta
+      función en el siguiente cuadro". Como cadaCuadro se vuelve a pedir a sí
+      misma al final, se crea un bucle que corre unas 60 veces por segundo,
+      parecido al tick() de A-Frame.
+   💡 performance.now() da la hora exacta en milisegundos. Restamos la hora de
+      inicio para saber cuánto tiempo pasó de verdad, aunque haya cuadros lentos. */
+const metros = () => Math.max(0, Math.ceil(METROS_INICIALES * J.restante / DURACION));
+// J.avisosDados (un Set = lista sin repetidos) recuerda qué eventos ya pasaron,
+// para que cada uno suene una sola vez.
+const EVENTOS = [   // ✏️ cosas que pasan cuando los raptores llegan a cierta distancia
+  { m: 45, texto: 'camview: movimiento en el pasillo B.', sonido: 'gruñido' },
+  { m: 30, texto: 'Algo golpeó la puerta del pasillo B.', sonido: 'golpe' },
+  { m: 15, texto: 'Se oyen rasguños del otro lado de la puerta.', sonido: 'rasguño' },
+  { m: 5,  texto: 'La manija de la puerta de la sala de control se está moviendo.', sonido: 'gruñido' }
+];
+function cadaCuadro() {
+  if (!J.activo) return;
+  J.restante = Math.max(0, DURACION - (performance.now() - J.inicio) / 1000);
+  const m = metros();
+  const seg = Math.ceil(J.restante);
+  // Minutos:segundos. padStart(2,'0') convierte 5 en "05" → "2:05"
+  $('reloj').textContent = Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0');
+  $('metros').textContent = m + ' m';
+  $('relleno').style.width = (100 * J.restante / DURACION) + '%';
+  $('relleno').classList.toggle('critico', m <= 15);
+  EVENTOS.forEach(ev => {
+    if (m <= ev.m && !J.avisosDados.has(ev)) {
+      J.avisosDados.add(ev);
+      escribir(ev.texto, 'error');
+      sonido[ev.sonido]();
+    }
+  });
+  if (J.restante <= 0) terminar(false);
+  else requestAnimationFrame(cadaCuadro);
+}
+
+
+/* ---------- Principio y fin ----------
+   iniciar(): despierta el audio (necesita un clic del usuario), esconde la
+              portada, guarda la hora de inicio y arranca el reloj.
+   terminar(gano): detiene todo y muestra la pantalla final.
+   💡 localStorage guarda datos en el navegador aunque cierres la página
+      (aquí, tu mejor tiempo). Va dentro de try/catch porque algunos
+      navegadores lo bloquean; si falla, el juego sigue sin récord. */
+function iniciar() {
+  ctxAudio();
+  $('portada').hidden = true;
+  $('portada').style.display = 'none';
+  J.activo = true;
+  J.inicio = performance.now();
+  escribir('Sistema de control IA-7, versión 2.1', 'tenue');
+  escribir('ADVERTENCIA: funcionando con energía de emergencia.', 'error');
+  escribir('Cerraduras magnéticas: sin energía.', 'error');
+  escribir('Las plataformas son carpetas y los bloques son archivos.', 'tenue');
+  requestAnimationFrame(cadaCuadro);
+}
+function terminar(gano) {
+  if (J.fin) return;
+  J.fin = true; J.activo = false;
+  $('ventana-clave').hidden = true;
+  const seg = Math.ceil(J.restante);
+  if (gano) {
+    sonido.exito();
+    setTimeout(sonido.rasguño, 900);
+    $('final-titulo').textContent = 'Puerta asegurada';
+    $('final-texto').textContent = `Los cerrojos se activaron con ${seg} segundos de sobra. Del otro lado de la puerta, algo sigue rasguñando.`;
+    let mejor = 0;
+    try { mejor = Number(localStorage.getItem('isla-ambar-mejor')) || 0; } catch (e) {}
+    if (seg > mejor) {
+      try { localStorage.setItem('isla-ambar-mejor', String(seg)); } catch (e) {}
+      $('final-record').textContent = 'Nuevo récord en este navegador.';
+    } else {
+      $('final-record').textContent = `Tu mejor marca: ${mejor} segundos de sobra.`;
+    }
+  } else {
+    sonido.gruñido();
+    $('final-titulo').textContent = 'Demasiado tarde';
+    $('final-texto').textContent = J.energia
+      ? 'Restauraste la energía, pero la puerta seguía abierta. La cerradura de la sala de control estaba a un clic.'
+      : 'La puerta se abrió. Sin energía, ninguna cerradura del edificio podía responder.';
+    $('final-record').textContent = '';
+  }
+  setTimeout(() => { $('final').hidden = false; $('btn-otra').focus(); }, gano ? 600 : 1200);
+}
+
+
+/* ---------- Conectamos todo ----------
+   Aquí se "escuchan" los avisos de los componentes y los clics de los botones.
+   💡 e.detail es el paquete de datos que mandó emit() en el componente.
+   💡 const { nodo, archivo } = e.detail  es "desestructuración": saca esas dos
+      propiedades del paquete y las guarda en variables con el mismo nombre. */
+escena.addEventListener('sistema-listo', e => {
+  RAIZ = e.detail.raiz;
+  NODOS = e.detail.nodos;
+  pintarPlataformas();
+  volar(0, -NIVEL, RAIZ.anchoSub, true);
+});
+
+escena.addEventListener('sobre', e => {
+  const info = $('info');
+  const { nodo, archivo } = e.detail;
+  if (!nodo && !archivo) { info.classList.remove('visible'); return; }
+  info.innerHTML = '';
+  const b = document.createElement('b');
+  if (archivo) {
+    b.textContent = archivo.nombre;
+    info.append(b, `   ${archivo.tipo.nombre}, ${Math.round(archivo.tam * 37)} KB`);
+  } else {
+    b.textContent = nodo.ruta + '/';
+    const cuantos = (nodo.hijos || []).length + (nodo.archivos || []).length;
+    info.append(b, `   ${cuantos} elementos${bloqueada(nodo) ? ', protegida' : ''}`);
+  }
+  info.classList.add('visible');
+});
+
+escena.addEventListener('elegir-carpeta', e => {
+  if (!J.activo) return;
+  sonido.clic();
+  entrarCarpeta(e.detail.nodo);
+});
+
+// Clic en un archivo: si su carpeta tiene clave, primero la pide; si no, lo abre
+escena.addEventListener('elegir-archivo', e => {
+  if (!J.activo) return;
+  const a = e.detail.archivo;
+  const n = a.dir;
+  if (bloqueada(n)) { entrarCarpeta(n); return; }
+  entrarCarpeta(n, true);
+  abrirArchivo(a);
+});
+
+$('btn-iniciar').addEventListener('click', iniciar);
+$('btn-subir').addEventListener('click', () => { if (J.activo) { sonido.clic(); subir(); } });
+$('btn-general').addEventListener('click', () => { if (J.activo) { sonido.clic(); vistaGeneral(); escribir('$ cd /isla-ambar', 'cmd'); listar(RAIZ); } });
+$('btn-cerrar-visor').addEventListener('click', () => $('visor').classList.remove('abierto'));
+$('btn-clave-ok').addEventListener('click', revisarClave);
+$('btn-clave-cancelar').addEventListener('click', () => { $('ventana-clave').hidden = true; J.pendiente = null; });
+$('campo-clave').addEventListener('input', () => { $('clave-error').textContent = ''; });
+$('campo-clave').addEventListener('keydown', e => { if (e.key === 'Enter') revisarClave(); });
+$('btn-otra').addEventListener('click', () => location.reload());
+// La tecla Escape cierra la ventana de la clave o el visor
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('ventana-clave').hidden) { $('ventana-clave').hidden = true; J.pendiente = null; }
+  else $('visor').classList.remove('abierto');
+});
+</script>
+</body>
+</html>
