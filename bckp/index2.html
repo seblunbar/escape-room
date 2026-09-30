@@ -909,10 +909,10 @@ const REGLAS = {
     mostrar(a.nombre, 'INSERTE MONEDA\n\n...\n\nNo es momento para jugar.\n(Aunque esto podría ser un buen juego.)');
   },
   launchgame(a) {
-    mostrar(a.nombre, 'MINECRAFT\nJugar\nOpciones\nMultijugador\nSalir\n\n(Se me olvidó la crisis jugando).\n-10 segundos.');
-    // El reloj se recalcula en cada cuadro a partir de J.inicio, así que para
-    // quitar tiempo adelantamos la hora de inicio 10 s (10000 ms) hacia el pasado.
-    J.inicio -= 10 * 1000;
+    mostrar(a.nombre, 'MINECRAFT\nJugar\nOpciones\nMultijugador\nSalir\n\n(Se me olvidó la crisis jugando).\n-30 segundos.');
+    const m = metros();
+    m -= 30;
+
   }
 };
 
